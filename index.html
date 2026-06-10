@@ -313,7 +313,15 @@ function maybeAutoOpen() {
 function handleSignIn() {
   if (!gapiInited || !gisInited) {
     document.getElementById('auth-status').textContent = 'ライブラリ読み込み中...';
-    setTimeout(handleSignIn, 500);
+    document.getElementById('signin-btn').disabled = true;
+    const timer = setInterval(() => {
+      if (gapiInited && gisInited) {
+        clearInterval(timer);
+        document.getElementById('auth-status').textContent = '';
+        document.getElementById('signin-btn').disabled = false;
+        tokenClient.requestAccessToken({ prompt: 'consent' });
+      }
+    }, 200);
     return;
   }
   tokenClient.requestAccessToken({ prompt: 'consent' });
