@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>縦書きビューア</title>
+<style>
+  :root {
+    --bg: #faf8f3;
+    --bg-panel: #f2efe8;
+    --text: #1a1814;
+    --text-muted: #6b6760;
+    --border: rgba(0,0,0,0.12);
+    --accent: #3C3489;
+    --accent-light: #EEEDFE;
+    --font-reading: "Hiragino Mincho ProN", "Yu Mincho", "YuMincho", serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1a1814;
+      --bg-panel: #221f1a;
+      --text: #f0ece0;
+      --text-muted: #8a877f;
+      --border: rgba(255,255,255,0.1);
+      --accent: #AFA9EC;
+      --accent-light: #26215C;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── ヘッダー ── */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 20px;
+    border-bottom: 0.5px solid var(--border);
+    background: var(--bg-panel);
+    flex-shrink: 0;
+  }
+  .logo {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+  }
+  .filename {
+    font-size: 13px;
+    color: var(--text-muted);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .toolbar label {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .toolbar select, .toolbar input[type=range] {
+    font-size: 12px;
+    background: var(--bg);
+    border: 0.5px solid var(--border);
+    color: var(--text);
+    padding: 3px 6px;
+    border-radius: 4px;
+  }
+  .toolbar input[type=range] {
+    width: 80px;
+    padding: 0;
+  }
+  #font-size-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    min-width: 32px;
+  }
+
+  /* ── 認証エリア ── */
+  #auth-panel {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 20px;
+    padding: 40px;
+  }
+  #auth-panel h2 {
+    font-size: 18px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+  }
+  #auth-panel p {
+    font-size: 14px;
+    color: var(--text-muted);
+    text-align: center;
+    line-height: 1.7;
+    max-width: 360px;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    padding: 10px 28px;
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    letter-spacing: 0.05em;
+    transition: opacity 0.15s;
+  }
+  .btn-primary:hover { opacity: 0.85; }
+
+  /* ── 読書エリア ── */
+  #reader {
+    flex: 1;
+    overflow: hidden;
+    display: none;
+  }
+  #text-content {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    font-family: var(--font-reading);
+    font-size: 18px;
+    line-height: 2;
+    letter-spacing: 0.05em;
+    height: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 32px 40px;
+    white-space: pre-wrap;
+    direction: rtl;
+    color: var(--text);
+    -webkit-overflow-scrolling: touch;
+  }
+  #text-content::-webkit-scrollbar { height: 6px; }
+  #text-content::-webkit-scrollbar-track { background: transparent; }
+  #text-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* ── エラー・ローディング ── */
+  #status {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    color: var(--text-muted);
+  }
+
+  /* ── ページ進捗 ── */
+  #progress {
+    position: fixed;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 11px;
+    color: var(--text-muted);
+    background: var(--bg-panel);
+    border: 0.5px solid var(--border);
+    padding: 3px 10px;
+    border-radius: 10px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="logo">縦書き</span>
+  <span class="filename" id="filename-display">—</span>
+  <div class="toolbar" id="toolbar" style="display:none">
+    <label>文字</label>
+    <input type="range" id="font-slider" min="12" max="32" value="18" step="1">
+    <span id="font-size-label">18px</span>
+    <label style="margin-left:8px">書体</label>
+    <select id="font-select">
+      <option value='"Hiragino Mincho ProN","Yu Mincho",serif'>明朝体</option>
+      <option value='"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif'>ゴシック体</option>
+    </select>
+  </div>
+</header>
+
+<div id="auth-panel">
+  <h2>Google Drive 縦書きビューア</h2>
+  <p>Googleアカウントでサインインして、Drive上のテキストファイルを縦書きで読めます。</p>
+  <button class="btn-primary" id="signin-btn" onclick="handleSignIn()">Googleでサインイン</button>
+  <p id="auth-status" style="font-size:12px; color:var(--text-muted);"></p>
+</div>
+
+<div id="status" style="display:none"></div>
+<div id="reader"><div id="text-content"></div></div>
+<div id="progress"></div>
+
+<!-- Google Identity Services -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script>
+// ══════════════════════════════════════════════
+//  設定 — Google Cloud Console で取得した値に書き換える
+// ══════════════════════════════════════════════
+const CLIENT_ID     = 'YOUR_CLIENT_ID.apps.googleusercontent.com';
+const API_KEY       = 'YOUR_API_KEY';
+const SCOPES        = 'https://www.googleapis.com/auth/drive.readonly';
+const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
+// ══════════════════════════════════════════════
+
+let tokenClient, gapiInited = false, gisInited = false;
+let currentFileId = null;
+
+// URL パラメータからファイルIDを取得（Drive の "Open with" はここに渡してくる）
+const params = new URLSearchParams(window.location.search);
+const stateParam = params.get('state');
+if (stateParam) {
+  try {
+    const s = JSON.parse(decodeURIComponent(stateParam));
+    currentFileId = s.ids ? s.ids[0] : null;
+  } catch(e) {}
+}
+
+// GAPI 初期化
+function gapiLoaded() {
+  gapi.load('client', async () => {
+    await gapi.client.init({ apiKey: API_KEY, discoveryDocs: [DISCOVERY_DOC] });
+    gapiInited = true;
+    maybeAutoOpen();
+  });
+}
+
+// GIS 初期化
+function gisLoaded() {
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPES,
+    callback: async (resp) => {
+      if (resp.error) { showError('認証エラー: ' + resp.error); return; }
+      if (currentFileId) {
+        await openFile(currentFileId);
+      } else {
+        showFilePicker();
+      }
+    },
+  });
+  gisInited = true;
+  maybeAutoOpen();
+}
+
+function maybeAutoOpen() {
+  if (gapiInited && gisInited && currentFileId) {
+    // Drive から直接開いた場合は自動サインイン試行
+    document.getElementById('auth-status').textContent = 'Drive から開いています...';
+    tokenClient.requestAccessToken({ prompt: '' });
+  }
+}
+
+function handleSignIn() {
+  if (!gapiInited || !gisInited) {
+    document.getElementById('auth-status').textContent = 'ライブラリ読み込み中...';
+    setTimeout(handleSignIn, 500);
+    return;
+  }
+  tokenClient.requestAccessToken({ prompt: 'consent' });
+}
+
+// ファイル一覧ピッカー（直接開く場合）
+async function showFilePicker() {
+  showLoading('テキストファイルを読み込み中...');
+  try {
+    const res = await gapi.client.drive.files.list({
+      q: "mimeType='text/plain' and trashed=false",
+      fields: 'files(id,name)',
+      orderBy: 'modifiedTime desc',
+      pageSize: 50,
+    });
+    const files = res.result.files;
+    if (!files || files.length === 0) {
+      showError('Drive にテキストファイルが見つかりません。');
+      return;
+    }
+    showPicker(files);
+  } catch(e) {
+    showError('ファイル一覧の取得に失敗しました。');
+  }
+}
+
+function showPicker(files) {
+  const panel = document.getElementById('auth-panel');
+  panel.innerHTML = `
+    <h2 style="font-size:16px;font-weight:500;margin-bottom:4px;">ファイルを選択</h2>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">Drive上のテキストファイル（最近50件）</p>
+    <div id="file-list" style="width:100%;max-width:480px;max-height:60vh;overflow-y:auto;border:0.5px solid var(--border);border-radius:8px;"></div>
+  `;
+  const list = document.getElementById('file-list');
+  files.forEach(f => {
+    const item = document.createElement('button');
+    item.style.cssText = 'display:block;width:100%;text-align:left;padding:10px 16px;border:none;border-bottom:0.5px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;cursor:pointer;';
+    item.textContent = f.name;
+    item.onmouseover = () => item.style.background = 'var(--bg-panel)';
+    item.onmouseout  = () => item.style.background = 'var(--bg)';
+    item.onclick = () => openFile(f.id, f.name);
+    list.appendChild(item);
+  });
+  panel.style.display = 'flex';
+}
+
+async function openFile(fileId, fileName) {
+  showLoading('ファイルを読み込んでいます...');
+  try {
+    const meta = await gapi.client.drive.files.get({ fileId, fields: 'name,mimeType' });
+    const name = fileName || meta.result.name;
+
+    const token = gapi.client.getToken().access_token;
+    const res = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+      { headers: { Authorization: 'Bearer ' + token } }
+    );
+    if (!res.ok) throw new Error('fetch failed');
+
+    // 文字コード自動検出（Shift-JIS 対応）
+    const buf = await res.arrayBuffer();
+    let text;
+    try {
+      const dec = new TextDecoder('utf-8', { fatal: true });
+      text = dec.decode(buf);
+    } catch {
+      try {
+        const dec = new TextDecoder('shift-jis');
+        text = dec.decode(buf);
+      } catch {
+        text = new TextDecoder('utf-8').decode(buf);
+      }
+    }
+
+    displayText(text, name);
+  } catch(e) {
+    showError('ファイルの読み込みに失敗しました。<br><small>' + e.message + '</small>');
+  }
+}
+
+function displayText(text, name) {
+  document.getElementById('auth-panel').style.display = 'none';
+  document.getElementById('status').style.display = 'none';
+  document.getElementById('reader').style.display = 'block';
+  document.getElementById('toolbar').style.display = 'flex';
+  document.getElementById('filename-display').textContent = name || '';
+
+  const el = document.getElementById('text-content');
+  el.textContent = text;
+
+  // スクロール進捗表示
+  let prog = document.getElementById('progress');
+  let scrollTimer;
+  el.addEventListener('scroll', () => {
+    const max = el.scrollWidth - el.clientWidth;
+    const pct = max > 0 ? Math.round((el.scrollLeft / max) * 100) : 0;
+    prog.textContent = pct + '%';
+    prog.style.opacity = '1';
+    clearTimeout(scrollTimer);
+    scrollTimer = setTimeout(() => { prog.style.opacity = '0'; }, 1500);
+  });
+}
+
+function showLoading(msg) {
+  document.getElementById('auth-panel').style.display = 'none';
+  document.getElementById('reader').style.display = 'none';
+  const s = document.getElementById('status');
+  s.innerHTML = msg;
+  s.style.display = 'flex';
+}
+
+function showError(msg) {
+  document.getElementById('auth-panel').style.display = 'none';
+  document.getElementById('reader').style.display = 'none';
+  const s = document.getElementById('status');
+  s.innerHTML = '<span style="color:#c0392b">' + msg + '</span>';
+  s.style.display = 'flex';
+}
+
+// ツールバー：文字サイズ
+document.getElementById('font-slider').addEventListener('input', function() {
+  const v = this.value;
+  document.getElementById('text-content').style.fontSize = v + 'px';
+  document.getElementById('font-size-label').textContent = v + 'px';
+});
+
+// ツールバー：書体
+document.getElementById('font-select').addEventListener('change', function() {
+  document.getElementById('text-content').style.fontFamily = this.value;
+});
+
+// GAPI / GIS をダイナミックロード
+(function() {
+  const s1 = document.createElement('script');
+  s1.src = 'https://apis.google.com/js/api.js';
+  s1.onload = gapiLoaded;
+  document.head.appendChild(s1);
+
+  const s2 = document.createElement('script');
+  s2.src = 'https://accounts.google.com/gsi/client';
+  s2.onload = gisLoaded;
+  document.head.appendChild(s2);
+})();
+</script>
+</body>
+</html>
